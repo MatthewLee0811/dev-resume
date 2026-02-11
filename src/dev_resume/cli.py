@@ -8,10 +8,17 @@ import subprocess
 import sys
 
 from dev_resume.config import detect_environment, get_environment, load_config, set_environment
+from dev_resume.context import check_context
 from dev_resume.display import banner, kv, show_session_summary, success, warn
 from dev_resume.git_sync import run_git_sync
 from dev_resume.project import detect_project_root, project_hash, project_name
-from dev_resume.session import create_session, load_session, save_session
+from dev_resume.session import (
+    create_session,
+    increment_turn,
+    load_session,
+    record_cleanup,
+    save_session,
+)
 
 
 # ── helpers ──────────────────────────────────────────────────────────
@@ -93,26 +100,39 @@ def _post_exit_prompt(phash: str, pname: str, ppath: str) -> None:
     success("세션 저장 완료")
 
 
-def _launch_claude(project_root: str, session: dict) -> int:
-    """Launch claude-code subprocess and return its exit code."""
+def _launch_claude(
+    project_root: str,
+    session: dict,
+    cleanup: str | None = None,
+) -> int:
+    """Launch claude-code subprocess and return its exit code.
+
+    cleanup: "resume" → --resume, "clear" → --clear, None → normal start
+    """
     claude_bin = shutil.which("claude")
     if claude_bin is None:
         warn("'claude' 명령어를 찾을 수 없습니다. claude-code를 설치해 주세요.")
         return 1
 
-    # Build resume prompt from session
-    parts: list[str] = []
-    last_next = session.get("last_next_todo", "")
-    if last_next:
-        parts.append(f"이전 세션에서 다음 할 일: {last_next}")
-
-    last_done = session.get("last_done", "")
-    if last_done:
-        parts.append(f"지난 작업 내용: {last_done}")
-
     cmd: list[str] = [claude_bin]
-    if parts:
-        cmd += ["--resume-prompt", " | ".join(parts)]
+
+    if cleanup == "resume":
+        cmd.append("--resume")
+    elif cleanup == "clear":
+        cmd.append("--clear")
+    else:
+        # Build resume prompt from session
+        parts: list[str] = []
+        last_next = session.get("last_next_todo", "")
+        if last_next:
+            parts.append(f"이전 세션에서 다음 할 일: {last_next}")
+
+        last_done = session.get("last_done", "")
+        if last_done:
+            parts.append(f"지난 작업 내용: {last_done}")
+
+        if parts:
+            cmd += ["--resume-prompt", " | ".join(parts)]
 
     try:
         result = subprocess.run(cmd, cwd=project_root)
@@ -125,7 +145,7 @@ def _launch_claude(project_root: str, session: dict) -> int:
 
 
 def cmd_run(args: argparse.Namespace) -> int:
-    """Default command — show summary → launch claude → post-exit save."""
+    """Default command — git sync → context check → summary → claude → save."""
     root = detect_project_root(getattr(args, "path", None))
     phash = project_hash(root)
     pname = project_name(root)
@@ -137,16 +157,23 @@ def cmd_run(args: argparse.Namespace) -> int:
     if session is None:
         session = _first_run(phash, pname, ppath)
 
-    # Show summary
-    show_session_summary(session)
-
-    # Git sync before launching
+    # 1) Git sync
     run_git_sync(ppath)
 
-    # Launch claude-code
-    exit_code = _launch_claude(ppath, session)
+    # 2) Context check
+    cleanup = check_context(session)
+    if cleanup:
+        record_cleanup(phash, cleanup)
 
-    # Post-exit prompt (only on clean exit)
+    # 3) Show summary
+    show_session_summary(session)
+
+    # 4) Launch claude-code
+    exit_code = _launch_claude(ppath, session, cleanup)
+
+    # 5) Post-exit: increment turn + prompt
+    increment_turn(phash)
+
     if exit_code == 0:
         _post_exit_prompt(phash, pname, ppath)
     else:

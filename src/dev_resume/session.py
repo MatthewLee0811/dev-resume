@@ -84,3 +84,38 @@ def create_session(
         project_path=project_path,
         next_todo=initial_task,
     )
+
+
+def increment_turn(phash: str) -> dict[str, Any] | None:
+    """Bump turn_count and estimated_tokens after a claude run."""
+    session = load_session(phash)
+    if session is None:
+        return None
+
+    session["turn_count"] = session.get("turn_count", 0) + 1
+    session["estimated_tokens"] = session["turn_count"] * 3000
+
+    now = datetime.now(timezone.utc).isoformat()
+    session["updated_at"] = now
+
+    path = session_path(phash)
+    path.write_text(json.dumps(session, indent=2, ensure_ascii=False), encoding="utf-8")
+    return session
+
+
+def record_cleanup(phash: str, method: str) -> dict[str, Any] | None:
+    """Record that a cleanup (resume/clear) was performed, reset turn_count."""
+    session = load_session(phash)
+    if session is None:
+        return None
+
+    now = datetime.now(timezone.utc).isoformat()
+    session["last_cleanup"] = now
+    session["last_cleanup_method"] = method
+    session["turn_count"] = 0
+    session["estimated_tokens"] = 0
+    session["updated_at"] = now
+
+    path = session_path(phash)
+    path.write_text(json.dumps(session, indent=2, ensure_ascii=False), encoding="utf-8")
+    return session
