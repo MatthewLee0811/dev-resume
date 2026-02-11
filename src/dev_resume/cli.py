@@ -7,6 +7,7 @@ import shutil
 import subprocess
 import sys
 
+from dev_resume.config import detect_environment, get_environment, load_config, set_environment
 from dev_resume.display import banner, kv, show_session_summary, success, warn
 from dev_resume.git_sync import run_git_sync
 from dev_resume.project import detect_project_root, project_hash, project_name
@@ -25,8 +26,37 @@ def _prompt(label: str) -> str:
         return ""
 
 
+def _confirm_environment() -> None:
+    """On first run (no config yet), detect env and ask user to confirm."""
+    config = load_config()
+    if "environment" in config:
+        return  # already configured
+
+    detected = detect_environment()
+    banner("환경 감지")
+    kv("  감지 결과", detected)
+
+    try:
+        answer = input(f"  맞습니까? [Y/n]: ").strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        print()
+        answer = ""
+
+    if answer in ("n", "no"):
+        # Flip to the other environment
+        env = "pc" if detected == "mobile" else "mobile"
+        set_environment(env)
+        success(f"환경을 '{env}'(으)로 저장했습니다.")
+    else:
+        set_environment(detected)
+        success(f"환경: {detected}")
+
+
 def _first_run(phash: str, pname: str, ppath: str) -> dict:
     """First-run: greet and create session."""
+    # Environment confirmation (only when config.json has no 'environment')
+    _confirm_environment()
+
     banner("새 프로젝트 감지!")
     kv("  경로", ppath)
     kv("  이름", pname)

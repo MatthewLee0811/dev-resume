@@ -4,18 +4,16 @@ from __future__ import annotations
 
 import subprocess
 
+from dev_resume.config import get_environment
 from dev_resume.display import banner, kv, success, warn
 
-# ── environment config (hardcoded for now, later from config.json) ───
 
-is_mobile = False  # TODO: read from ~/.dev-resume/config.json
-
-if is_mobile:
-    PRIMARY = "mobile"
-    SECONDARY = "main"
-else:
-    PRIMARY = "main"
-    SECONDARY = "mobile"
+def _get_branches() -> tuple[str, str]:
+    """Return (primary, secondary) based on current environment."""
+    env = get_environment()
+    if env == "mobile":
+        return "mobile", "main"
+    return "main", "mobile"
 
 
 # ── helpers ──────────────────────────────────────────────────────────
@@ -99,8 +97,7 @@ def _prompt_choice(label: str) -> str:
 # ── primary branch sync ─────────────────────────────────────────────
 
 
-def _sync_primary(cwd: str) -> None:
-    branch = PRIMARY
+def _sync_primary(branch: str, cwd: str) -> None:
     banner(f"Primary: {branch}")
 
     if not _remote_branch_exists(branch, cwd):
@@ -133,8 +130,7 @@ def _sync_primary(cwd: str) -> None:
 # ── secondary branch merge ───────────────────────────────────────────
 
 
-def _sync_secondary(cwd: str) -> None:
-    branch = SECONDARY
+def _sync_secondary(branch: str, cwd: str) -> None:
     banner(f"Secondary: {branch}")
 
     if not _remote_branch_exists(branch, cwd):
@@ -197,6 +193,7 @@ def run_git_sync(project_path: str) -> None:
 
     success("git fetch origin 완료")
 
-    _sync_primary(project_path)
-    _sync_secondary(project_path)
+    primary, secondary = _get_branches()
+    _sync_primary(primary, project_path)
+    _sync_secondary(secondary, project_path)
     print()
