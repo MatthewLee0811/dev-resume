@@ -8,6 +8,7 @@ import subprocess
 import sys
 
 from dev_resume.display import banner, kv, show_session_summary, success, warn
+from dev_resume.git_sync import run_git_sync
 from dev_resume.project import detect_project_root, project_hash, project_name
 from dev_resume.session import create_session, load_session, save_session
 
@@ -108,6 +109,9 @@ def cmd_run(args: argparse.Namespace) -> int:
 
     # Show summary
     show_session_summary(session)
+
+    # Git sync before launching
+    run_git_sync(ppath)
 
     # Launch claude-code
     exit_code = _launch_claude(ppath, session)
