@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=68.0", "setuptools-scm"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dev-resume"
+version = "0.1.0"
+description = "Resume your dev session where you left off with claude-code"
+requires-python = ">=3.9"
+license = {text = "MIT"}
+
+[project.scripts]
+dev-resume = "dev_resume.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
