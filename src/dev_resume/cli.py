@@ -16,7 +16,6 @@ from dev_resume.session import (
     create_session,
     increment_turn,
     load_session,
-    record_cleanup,
     save_session,
 )
 
@@ -100,42 +99,15 @@ def _post_exit_prompt(phash: str, pname: str, ppath: str) -> None:
     success("세션 저장 완료")
 
 
-def _launch_claude(
-    project_root: str,
-    session: dict,
-    cleanup: str | None = None,
-) -> int:
-    """Launch claude-code subprocess and return its exit code.
-
-    cleanup: "resume" → --resume, "clear" → --clear, None → normal start
-    """
+def _launch_claude(project_root: str) -> int:
+    """Launch claude-code subprocess and return its exit code."""
     claude_bin = shutil.which("claude")
     if claude_bin is None:
         warn("'claude' 명령어를 찾을 수 없습니다. claude-code를 설치해 주세요.")
         return 1
 
-    cmd: list[str] = [claude_bin]
-
-    if cleanup == "resume":
-        cmd.append("--resume")
-    elif cleanup == "clear":
-        cmd.append("--clear")
-    else:
-        # Build resume prompt from session
-        parts: list[str] = []
-        last_next = session.get("last_next_todo", "")
-        if last_next:
-            parts.append(f"이전 세션에서 다음 할 일: {last_next}")
-
-        last_done = session.get("last_done", "")
-        if last_done:
-            parts.append(f"지난 작업 내용: {last_done}")
-
-        if parts:
-            cmd += ["--resume-prompt", " | ".join(parts)]
-
     try:
-        result = subprocess.run(cmd, cwd=project_root)
+        result = subprocess.run([claude_bin], cwd=project_root)
         return result.returncode
     except KeyboardInterrupt:
         return 130
@@ -161,15 +133,13 @@ def cmd_run(args: argparse.Namespace) -> int:
     run_git_sync(ppath)
 
     # 2) Context check
-    cleanup = check_context(session)
-    if cleanup:
-        record_cleanup(phash, cleanup)
+    check_context(session)
 
     # 3) Show summary
     show_session_summary(session)
 
     # 4) Launch claude-code
-    exit_code = _launch_claude(ppath, session, cleanup)
+    exit_code = _launch_claude(ppath)
 
     # 5) Post-exit: increment turn + prompt
     increment_turn(phash)
